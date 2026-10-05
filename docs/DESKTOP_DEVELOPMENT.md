@@ -56,6 +56,12 @@ Windows development also needs a native MSVC/Windows SDK build environment and a
 working WebView2 runtime. Build the x64 package on an x64 Windows host and the
 ARM64 package on a native Windows ARM64 host.
 
+The normal Windows build targets Windows 10 or newer. Windows 8.1 x64 is an explicit
+legacy compatibility build: it uses Rust's `x86_64-win7-windows-msvc` target with a
+nightly `build-std` because current Rust's ordinary `x86_64-pc-windows-msvc` target
+has a Windows 10 baseline. Windows 8.1 also requires the final supported WebView2
+Runtime 109; newer WebView2 runtimes do not support Windows 8.1.
+
 macOS development needs Xcode Command Line Tools. Build `darwin-arm64` on Apple
 Silicon and `darwin-x64` on an Intel Mac. The staging helper deliberately rejects
 a host/binary architecture mismatch.
@@ -168,6 +174,37 @@ WEBCODEX_DESKTOP_BIN_DIR="$PWD/target/dogfood" \
 Launch from the logged-in graphical session. An existing Environment is checked for conflicts; this procedure is not an instruction to overwrite it. Viewer setup creates no Runner identity and does not install, stop, or take over existing services. **Local Runner · Not configured** refers to this Desktop environment, while Projects can show authorized work on independently running local or remote Runners. Open `SERVER_URL/runtime` for the same Server's browser console.
 
 To upgrade independently managed Server/Runner binaries, first identify their real service owner, check active work, save the previous binaries/configuration and a consistent Server data snapshot, then use that owner's lifecycle controls. Verify the deployed build and recovery of the same Runner identities/project registrations. Keep existing Tunnel configuration with its owner. This manual source deployment is separate from Core migration and installer upgrade; see the [recorded Linux dogfood evidence](unified-deployment-validation.md#linux-source-deployment-evidence).
+
+## Build a Windows 8.1 x64 compatibility installer
+
+Windows 8.1 uses a separate build path so the normal Windows 10+ package is not
+weakened or silently retargeted. Install the nightly Rust toolchain and `rust-src`
+once on the Windows x64 build machine:
+
+```powershell
+rustup toolchain install nightly --profile minimal
+rustup component add rust-src --toolchain nightly
+```
+
+Then build from the repository root:
+
+```powershell
+.\scripts\build_desktop_windows_legacy.ps1
+```
+
+For an intentionally dirty local test build, add `-AllowDirty`. The helper compiles
+CLI, Server, Runner, and Desktop with `x86_64-win7-windows-msvc`, builds the standard
+library locally with `-Z build-std`, stages the exact matching runtime, and verifies
+the PE import tables before producing NSIS. In particular, the check rejects static
+imports of Windows 10-only DPI APIs such as `SetThreadDpiAwarenessContext`, which
+otherwise make Windows 8.1 fail in the loader before WebCodex reaches `main()`.
+
+The output is written under `target\desktop-win81-dist\`. Before running the package
+on Windows 8.1, install or retain Microsoft Edge WebView2 Runtime 109.x. Do not let an
+Evergreen WebView2 installer replace this prerequisite with a newer unsupported
+runtime. Native import validation proves the known loader boundary; final Windows
+8.1 acceptance still requires launching Desktop plus the bundled CLI, Server, and
+Runner on a real Windows 8.1 x64 machine.
 
 ## Build a Windows installer locally
 

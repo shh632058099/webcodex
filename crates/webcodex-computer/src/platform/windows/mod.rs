@@ -31,7 +31,7 @@ use windows::Win32::System::{
 };
 #[cfg(windows)]
 use windows::{
-    core::{w, IUnknown, Interface, PCWSTR},
+    core::{s, w, IUnknown, Interface, PCWSTR},
     Win32::{
         Foundation::{
             GetLastError, GlobalFree, SetLastError, E_NOINTERFACE, E_POINTER, HANDLE, HGLOBAL,
@@ -47,6 +47,7 @@ use windows::{
             CloseClipboard, EmptyClipboard, GetClipboardData, IsClipboardFormatAvailable,
             OpenClipboard, SetClipboardData,
         },
+        System::LibraryLoader::{GetModuleHandleW, GetProcAddress},
         System::Memory::{GlobalAlloc, GlobalLock, GlobalSize, GlobalUnlock, GMEM_MOVEABLE},
         System::Ole::CF_UNICODETEXT,
         UI::Accessibility::{
@@ -66,10 +67,7 @@ use windows::{
             UIA_TreeItemControlTypeId, UIA_ValuePatternId, UIA_WindowControlTypeId,
             UIA_CONTROLTYPE_ID, UIA_E_ELEMENTNOTAVAILABLE, UIA_E_NOTSUPPORTED, UIA_PATTERN_ID,
         },
-        UI::HiDpi::{
-            SetThreadDpiAwarenessContext, DPI_AWARENESS_CONTEXT,
-            DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2,
-        },
+        UI::HiDpi::{DPI_AWARENESS_CONTEXT, DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2},
         UI::Input::KeyboardAndMouse::{
             GetAsyncKeyState, SendInput, INPUT, INPUT_0, INPUT_KEYBOARD, INPUT_MOUSE, KEYBDINPUT,
             KEYBD_EVENT_FLAGS, KEYEVENTF_EXTENDEDKEY, KEYEVENTF_KEYUP, MOUSEEVENTF_ABSOLUTE,

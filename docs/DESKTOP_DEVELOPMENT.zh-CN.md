@@ -53,6 +53,12 @@ Windows 还需要原生 MSVC / Windows SDK 构建环境以及可用的 WebView2 
 Windows x64 安装包在 x64 Windows 上 native 构建；Windows ARM64 安装包在 native
 Windows ARM64 主机上构建。
 
+普通 Windows 构建的系统基线是 Windows 10 或更高版本。Windows 8.1 x64 使用独立的
+legacy compatibility 构建：通过 Rust 的 `x86_64-win7-windows-msvc` target 配合
+nightly `build-std`，避免当前普通 `x86_64-pc-windows-msvc` target 的 Windows 10
+系统基线。Windows 8.1 同时要求 WebView2 Runtime 109；更新版本的 WebView2 已不再
+支持 Windows 8.1。
+
 macOS 需要 Xcode Command Line Tools。`darwin-arm64` 在 Apple Silicon 上构建，
 `darwin-x64` 在 Intel Mac 上构建。staging helper 会主动拒绝 host/binary architecture
 不匹配。
@@ -162,6 +168,33 @@ WEBCODEX_DESKTOP_BIN_DIR="$PWD/target/dogfood" \
 在已登录的图形会话中启动 Desktop。已有 Environment 时会检查冲突，以上步骤不要求覆盖旧配置。仅查看配置不创建 Runner 身份，也不安装、停止或接管现有服务。“本地 Runner · 未配置”指当前 Desktop 环境；项目页仍可显示独立运行的本机或远端 Runner 上获授权的项目。浏览器打开 `SERVER_URL/runtime` 可查看同一 Server 的网页控制台。
 
 升级独立托管的 Server/Runner 程序前，应先确认实际服务所有者和活动任务，保存旧程序、配置以及一致的 Server 数据快照，再通过原所有者的生命周期入口切换。升级后核对构建身份、Runner 身份和项目注册是否恢复。原 Tunnel 配置仍由原所有者管理。该手动源码部署与 Core 迁移、安装器升级不同，参见[已记录的 Linux dogfood 证据](unified-deployment-validation.md#linux-源码部署证据)。
+
+## 构建 Windows 8.1 x64 兼容 installer
+
+Windows 8.1 使用独立构建路径，不修改普通 Windows 10+ 包的系统基线。先在 Windows
+x64 构建机上安装 nightly Rust toolchain 与 `rust-src`：
+
+```powershell
+rustup toolchain install nightly --profile minimal
+rustup component add rust-src --toolchain nightly
+```
+
+然后在仓库根目录执行：
+
+```powershell
+.\scripts\build_desktop_windows_legacy.ps1
+```
+
+如果只是打包未提交修改做本机验证，可以加 `-AllowDirty`。该脚本会让 CLI、Server、
+Runner 和 Desktop 全部使用 `x86_64-win7-windows-msvc`，并通过 `-Z build-std`
+自行构建标准库；随后 stage 同一套 runtime，并在生成 NSIS 前检查 PE import table。
+其中会显式拒绝 `SetThreadDpiAwarenessContext` 等 Windows 10-only DPI API 的静态导入，
+避免 Windows 8.1 在进入 WebCodex `main()` 之前就被系统 loader 拒绝。
+
+产物位于 `target\desktop-win81-dist\`。在 Windows 8.1 上测试之前，需要安装或保留
+Microsoft Edge WebView2 Runtime 109.x，不要让 Evergreen 安装器升级到不支持
+Windows 8.1 的版本。PE import 检查可以覆盖当前已知的 loader 边界，但最终兼容性仍需
+在真实 Windows 8.1 x64 主机上分别启动 Desktop、CLI、Server 和 Runner 做验收。
 
 ## 在 Windows 本地构建 installer
 

@@ -1,29 +1,63 @@
 use super::*;
 
 #[cfg(windows)]
+type SetThreadDpiAwarenessContextFn =
+    unsafe extern "system" fn(DPI_AWARENESS_CONTEXT) -> DPI_AWARENESS_CONTEXT;
+
+#[cfg(windows)]
+fn set_thread_dpi_awareness_context_proc() -> Option<SetThreadDpiAwarenessContextFn> {
+    // SetThreadDpiAwarenessContext was introduced in Windows 10 1607. Resolve it at runtime
+    // so the Runner can still be loaded on Windows 8.1. User32 stays loaded for the process
+    // lifetime, so the returned function pointer remains valid while this process is alive.
+    unsafe {
+        let user32 = GetModuleHandleW(w!("user32.dll")).ok()?;
+        let proc = GetProcAddress(user32, s!("SetThreadDpiAwarenessContext"))?;
+        Some(std::mem::transmute::<_, SetThreadDpiAwarenessContextFn>(proc))
+    }
+}
+
+#[cfg(windows)]
 pub(crate) struct PointerCoordinateContext {
-    previous: DPI_AWARENESS_CONTEXT,
+    set_thread_dpi_awareness_context: Option<SetThreadDpiAwarenessContextFn>,
+    previous: Option<DPI_AWARENESS_CONTEXT>,
 }
 
 #[cfg(windows)]
 impl Drop for PointerCoordinateContext {
     fn drop(&mut self) {
-        let restored = unsafe { SetThreadDpiAwarenessContext(self.previous) };
+        let (Some(set_thread_dpi_awareness_context), Some(previous)) =
+            (self.set_thread_dpi_awareness_context, self.previous)
+        else {
+            return;
+        };
+        let restored = unsafe { set_thread_dpi_awareness_context(previous) };
         debug_assert!(!restored.0.is_null());
     }
 }
 
 #[cfg(windows)]
 pub(crate) fn enter_pointer_coordinate_context() -> Result<PointerCoordinateContext, String> {
+    let Some(set_thread_dpi_awareness_context) = set_thread_dpi_awareness_context_proc() else {
+        // Windows 8.1 has no thread DPI-awareness-context API. Do not change process-wide DPI
+        // state here: pointer preflight below compares Windows virtual-desktop metrics with xcap's
+        // native bounds and refuses the input before any effect if the coordinate spaces differ.
+        return Ok(PointerCoordinateContext {
+            set_thread_dpi_awareness_context: None,
+            previous: None,
+        });
+    };
     let previous =
-        unsafe { SetThreadDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2) };
+        unsafe { set_thread_dpi_awareness_context(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2) };
     if previous.0.is_null() {
         return Err(
             "pointer_input_failed: Windows per-monitor DPI coordinate context is unavailable"
                 .to_string(),
         );
     }
-    Ok(PointerCoordinateContext { previous })
+    Ok(PointerCoordinateContext {
+        set_thread_dpi_awareness_context: Some(set_thread_dpi_awareness_context),
+        previous: Some(previous),
+    })
 }
 
 #[cfg(windows)]
